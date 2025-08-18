@@ -58,7 +58,7 @@ fun ImgCompressAppHomeScreen(
     modifier: Modifier = Modifier,
 ) {
     var isPercentSize by remember { mutableStateOf(false)}
-    var size = 0.0
+    var size by remember { mutableStateOf(0.0) }
     
     Column(modifier = Modifier
         .padding(bottom = 32.dp, top = 32.dp)
@@ -80,31 +80,13 @@ fun ImgCompressAppHomeScreen(
             ),
             label = R.string.placeholder,
             initValue = size,
-            modifier = Modifier.fillMaxWidth()
+            modifier = Modifier.fillMaxWidth(),
+            onValueChanged = {updatedValue -> size = updatedValue}
         )
     }
 
 }
 
-//@Composable
-//fun EditNumberField(
-//    @DrawableRes leadingIcon: Int,
-//    @StringRes label: Int,
-//    keyboardOptions: KeyboardOptions,
-//    modifier: Modifier = Modifier,
-//    value: String,
-//    onValueChanged: (String) -> Unit) {
-//    TextField(
-//        leadingIcon = {Icon(painter = painterResource(id = leadingIcon), null)},
-//        value = value,
-//        onValueChange = onValueChanged,
-//        modifier = modifier,
-//        label = {Text(stringResource(label))},
-//        singleLine = true,
-//        keyboardOptions = keyboardOptions
-//
-//    )
-//}
 
 @Composable
 fun EditNumberField(
@@ -112,17 +94,24 @@ fun EditNumberField(
     @StringRes label: Int,
     keyboardOptions: KeyboardOptions,
     modifier: Modifier = Modifier,
-    initValue: Double
+    initValue: Double,
+    onValueChanged: (Double) -> Unit
 ) {
     var value by remember { mutableStateOf(initValue.toString()) }
 
     TextField(
-        leadingIcon = { Icon(painter = painterResource(id = leadingIcon), contentDescription = null) },
+        leadingIcon = {
+            Icon(
+                painter = painterResource(id = leadingIcon),
+                contentDescription = null
+            )
+        },
         value = value,
         onValueChange = { newValue ->
-            // Allow only digits and at most one decimal point
+            // Validate input to be decimal
             if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d*\$"))) {
                 value = newValue
+                newValue.toDoubleOrNull()?.let { onValueChanged(it) }
             }
         },
         modifier = modifier,
@@ -131,6 +120,7 @@ fun EditNumberField(
         keyboardOptions = keyboardOptions
     )
 }
+
 
 
 
