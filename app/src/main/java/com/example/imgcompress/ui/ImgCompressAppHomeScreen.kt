@@ -59,13 +59,15 @@ fun ImgCompressAppHomeScreen(
 ) {
     var isPercentSize by remember { mutableStateOf(false)}
     var size by remember { mutableStateOf(0.0) }
-    
+    var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
+
+
     Column(modifier = Modifier
         .padding(bottom = 32.dp, top = 32.dp)
         .fillMaxSize(),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally) {
-        UploadImageRow()
+        UploadImageRow( onImageSelected = {uri -> selectedImageUri = uri})
         PercentageSizeSwitchRow(
             modifier = Modifier.fillMaxWidth()
                 .padding(start = 32.dp, end = 32.dp),
@@ -147,9 +149,10 @@ fun PercentageSizeSwitchRow(
 }
 
 @Composable
-fun UploadImageRow()
-{
-    val context = LocalContext.current
+fun UploadImageRow(
+    modifier: Modifier = Modifier,
+    onImageSelected: (Uri) -> Unit
+) {
     var imageUri by remember { mutableStateOf<Uri?>(null) }
 
     // Launcher for picking image
@@ -157,17 +160,15 @@ fun UploadImageRow()
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         imageUri = uri
+        uri?.let { onImageSelected(it) } // expose to parent
     }
 
     Column(
-        modifier = Modifier
-            .padding(16.dp),
+        modifier = modifier.padding(16.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
-        Button(onClick = {
-            launcher.launch("image/*") // opens gallery
-        }) {
+        Button(onClick = { launcher.launch("image/*") }) {
             Text("Choose Photo")
         }
 
