@@ -15,6 +15,7 @@
  */
 package com.example.imgcompress.ui
 
+import android.content.ContentValues
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
@@ -51,6 +52,16 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.imgcompress.R
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
+import android.provider.MediaStore
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.rememberCoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 
 
 @Composable
@@ -60,7 +71,8 @@ fun ImgCompressAppHomeScreen(
     var isPercentSize by remember { mutableStateOf(false)}
     var size by remember { mutableStateOf(0.0) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
-
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
 
     Column(modifier = Modifier
         .padding(bottom = 32.dp, top = 32.dp)
@@ -85,9 +97,85 @@ fun ImgCompressAppHomeScreen(
             modifier = Modifier.fillMaxWidth(),
             onValueChanged = {updatedValue -> size = updatedValue}
         )
+        Button(
+            onClick = {
+                scope.launch {
+                    selectedImageUri?.let {
+                        CompressImage(
+                            context = context,
+                            isPercentSize = isPercentSize,
+                            size = size,
+                            selectedImageUri = it
+                        )
+                    }
+                }
+            }
+        ) { Text("Compress Photo") }
     }
 
 }
+
+suspend fun CompressImage(
+    context: Context,
+    isPercentSize: Boolean,
+    size: Double, // if MB, e.g. 1.5 = 1.5 MB; if percent, e.g. 0.5 = 50%
+    selectedImageUri: Uri
+): Uri? = withContext(Dispatchers.IO) {
+    try {
+        // Decode bitmap from URI
+        val inputStream = context.contentResolver.openInputStream(selectedImageUri)
+        val originalBitmap = BitmapFactory.decodeStream(inputStream) ?: return@withContext null
+        inputStream?.close()
+
+        var bitmap = originalBitmap
+
+        // Resize if using percentage scaling
+        if (isPercentSize) {
+            val newWidth = (bitmap.width * size).toInt()
+            val newHeight = (bitmap.height * size).toInt()
+            bitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+        }
+
+        // Compress loop
+        val outputStream = ByteArrayOutputStream()
+        var quality = 100
+        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+
+        if (!isPercentSize) {
+            val targetBytes = (size * 1024 * 1024).toLong() // MB → bytes
+            while (outputStream.size() > targetBytes && quality > 5) {
+                outputStream.reset()
+                quality -= 5
+                bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+            }
+        }
+
+        // Save compressed image into MediaStore
+        val contentValues = ContentValues().apply {
+            put(MediaStore.Images.Media.DISPLAY_NAME, "compressed_${System.currentTimeMillis()}.jpg")
+            put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
+            put(MediaStore.Images.Media.RELATIVE_PATH, "Pictures/Compressed")
+        }
+
+        val uri = context.contentResolver.insert(
+            MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
+            contentValues
+        )
+
+        uri?.let {
+            context.contentResolver.openOutputStream(it)?.use { fileOut ->
+                fileOut.write(outputStream.toByteArray())
+                fileOut.flush()
+            }
+        }
+
+        return@withContext uri
+    } catch (e: Exception) {
+        e.printStackTrace()
+        return@withContext null
+    }
+}
+
 
 
 @Composable
