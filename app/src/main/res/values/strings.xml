@@ -1,5 +1,5 @@
 <resources>
     <string name="app_name">ImgCompress</string>
-    <string name="percent_size_flat_size">\% Size/Flat Size\</string>
+    <string name="percent_size_flat_size">\Flat Size/% Size\</string>
     <string name="placeholder">\placeholder\</string>
 </resources>
