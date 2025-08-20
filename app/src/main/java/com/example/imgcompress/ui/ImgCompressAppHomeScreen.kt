@@ -125,8 +125,10 @@ fun ImgCompressAppHomeScreen(
 
 data class CompressedImageResult(
     val uri: Uri,
-    val sizeBytes: Long
+    val originalSizeBytes: Long,
+    val compressedSizeBytes: Long
 )
+
 
 suspend fun CompressImage(
     context: Context,
@@ -135,6 +137,11 @@ suspend fun CompressImage(
     selectedImageUri: Uri
 ): CompressedImageResult? = withContext(Dispatchers.IO) {
     try {
+        // Get original file size
+        val fd = context.contentResolver.openFileDescriptor(selectedImageUri, "r")
+        val originalSize = fd?.statSize ?: 0L
+        fd?.close()
+
         // Decode bitmap
         val inputStream = context.contentResolver.openInputStream(selectedImageUri)
         val originalBitmap = BitmapFactory.decodeStream(inputStream) ?: return@withContext null
@@ -142,9 +149,6 @@ suspend fun CompressImage(
 
         // Target bytes
         val targetBytes: Long = if (isPercentSize) {
-            val fd = context.contentResolver.openFileDescriptor(selectedImageUri, "r")
-            val originalSize = fd?.statSize ?: 0L
-            fd?.close()
             (originalSize * (size / 100.0)).toLong()
         } else {
             (size * 1024 * 1024).toLong()
@@ -181,12 +185,13 @@ suspend fun CompressImage(
             finalSize = data.size.toLong()
         }
 
-        return@withContext CompressedImageResult(uri, finalSize)
+        return@withContext CompressedImageResult(uri, originalSize, finalSize)
     } catch (e: Exception) {
         e.printStackTrace()
         return@withContext null
     }
 }
+
 
 
 
@@ -317,9 +322,14 @@ fun CompressionPopup(result: CompressedImageResult?, onDismiss: () -> Unit) {
             },
             title = { Text("Photo Saved") },
             text = {
-                Text("Your photo has been saved.\nSize: ${"%.2f".format(result.sizeBytes / 1024.0)} KB")
+                Text(
+                    "Your photo has been saved.\n" +
+                            "Original size: ${"%.2f".format(result.originalSizeBytes / 1024.0)} KB\n" +
+                            "Compressed size: ${"%.2f".format(result.compressedSizeBytes / 1024.0)} KB"
+                )
             }
         )
     }
 }
+
 
