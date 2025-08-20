@@ -56,6 +56,8 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.provider.MediaStore
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -74,11 +76,14 @@ fun ImgCompressAppHomeScreen(
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
 
+    var result by remember { mutableStateOf<CompressedImageResult?>(null) }
+
     Column(modifier = Modifier
         .padding(bottom = 32.dp, top = 32.dp)
         .fillMaxSize(),
         verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally) {
+        horizontalAlignment = Alignment.CenterHorizontally)
+    {
         UploadImageRow( onImageSelected = {uri -> selectedImageUri = uri})
         PercentageSizeSwitchRow(
             modifier = Modifier.fillMaxWidth()
@@ -101,7 +106,7 @@ fun ImgCompressAppHomeScreen(
             onClick = {
                 scope.launch {
                     selectedImageUri?.let {
-                        CompressImage(
+                        result = CompressImage(
                             context = context,
                             isPercentSize = isPercentSize,
                             size = size,
@@ -111,43 +116,48 @@ fun ImgCompressAppHomeScreen(
                 }
             }
         ) { Text("Compress Photo") }
+
+        CompressionPopup(result = result, onDismiss = {result = null})
     }
 
 }
 
+data class CompressedImageResult(
+    val uri: Uri,
+    val sizeBytes: Long
+)
+
 suspend fun CompressImage(
     context: Context,
     isPercentSize: Boolean,
-    size: Double, // if MB, e.g. 1.5 = 1.5 MB; if percent, e.g. 0.5 = 50%
+    size: Double, // if MB, e.g. 1.5 = 1.5 MB; if percent, e.g. 50.0 = 50%
     selectedImageUri: Uri
-): Uri? = withContext(Dispatchers.IO) {
+): CompressedImageResult? = withContext(Dispatchers.IO) {
     try {
-        // Decode bitmap from URI
+        // Decode bitmap
         val inputStream = context.contentResolver.openInputStream(selectedImageUri)
         val originalBitmap = BitmapFactory.decodeStream(inputStream) ?: return@withContext null
         inputStream?.close()
 
-        var bitmap = originalBitmap
-
-        // Resize if using percentage scaling
-        if (isPercentSize) {
-            val newWidth = (bitmap.width * size).toInt()
-            val newHeight = (bitmap.height * size).toInt()
-            bitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+        // Target bytes
+        val targetBytes: Long = if (isPercentSize) {
+            val fd = context.contentResolver.openFileDescriptor(selectedImageUri, "r")
+            val originalSize = fd?.statSize ?: 0L
+            fd?.close()
+            (originalSize * (size / 100.0)).toLong()
+        } else {
+            (size * 1024 * 1024).toLong()
         }
 
         // Compress loop
         val outputStream = ByteArrayOutputStream()
         var quality = 100
-        bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+        originalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
 
-        if (!isPercentSize) {
-            val targetBytes = (size * 1024 * 1024).toLong() // MB → bytes
-            while (outputStream.size() > targetBytes && quality > 5) {
-                outputStream.reset()
-                quality -= 5
-                bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
-            }
+        while (outputStream.size() > targetBytes && quality > 5) {
+            outputStream.reset()
+            quality -= 5
+            originalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
         }
 
         // Save compressed image into MediaStore
@@ -160,21 +170,25 @@ suspend fun CompressImage(
         val uri = context.contentResolver.insert(
             MediaStore.Images.Media.EXTERNAL_CONTENT_URI,
             contentValues
-        )
+        ) ?: return@withContext null
 
-        uri?.let {
-            context.contentResolver.openOutputStream(it)?.use { fileOut ->
-                fileOut.write(outputStream.toByteArray())
-                fileOut.flush()
-            }
+        var finalSize = 0L
+        context.contentResolver.openOutputStream(uri)?.use { fileOut ->
+            val data = outputStream.toByteArray()
+            fileOut.write(data)
+            fileOut.flush()
+            finalSize = data.size.toLong()
         }
 
-        return@withContext uri
+        return@withContext CompressedImageResult(uri, finalSize)
     } catch (e: Exception) {
         e.printStackTrace()
         return@withContext null
     }
 }
+
+
+
 
 
 
@@ -271,3 +285,22 @@ fun UploadImageRow(
         }
     }
 }
+
+@Composable
+fun CompressionPopup(result: CompressedImageResult?, onDismiss: () -> Unit) {
+    if (result != null) {
+        AlertDialog(
+            onDismissRequest = { onDismiss() },
+            confirmButton = {
+                TextButton(onClick = onDismiss) {
+                    Text("OK")
+                }
+            },
+            title = { Text("Photo Saved") },
+            text = {
+                Text("Your photo has been saved.\nSize: ${"%.2f".format(result.sizeBytes / 1024.0)} KB")
+            }
+        )
+    }
+}
+
