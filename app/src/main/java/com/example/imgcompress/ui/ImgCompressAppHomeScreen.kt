@@ -133,7 +133,7 @@ data class CompressedImageResult(
 suspend fun CompressImage(
     context: Context,
     isPercentSize: Boolean,
-    size: Double, // if MB, e.g. 1.5 = 1.5 MB; if percent, e.g. 50.0 = 50%
+    size: Double, // if MB or percent
     selectedImageUri: Uri
 ): CompressedImageResult? = withContext(Dispatchers.IO) {
     try {
@@ -144,7 +144,7 @@ suspend fun CompressImage(
 
         // Decode bitmap
         val inputStream = context.contentResolver.openInputStream(selectedImageUri)
-        val originalBitmap = BitmapFactory.decodeStream(inputStream) ?: return@withContext null
+        var bitmap = BitmapFactory.decodeStream(inputStream) ?: return@withContext null
         inputStream?.close()
 
         // Target bytes
@@ -154,15 +154,27 @@ suspend fun CompressImage(
             (size * 1024 * 1024).toLong()
         }
 
-        // Compress loop
         val outputStream = ByteArrayOutputStream()
         var quality = 100
-        originalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
 
-        while (outputStream.size() > targetBytes && quality > 5) {
+        // Compression + downscale loop
+        while (true) {
             outputStream.reset()
-            quality -= 5
-            originalBitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+            bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
+
+            if (outputStream.size() <= targetBytes || (quality <= 5 && bitmap.width <= 100)) {
+                break // either fits or cannot compress/rescale further
+            }
+
+            if (quality > 5) {
+                quality -= 5 // reduce quality first
+            } else {
+                // Reduce resolution by 90%
+                val newWidth = (bitmap.width * 0.9).toInt()
+                val newHeight = (bitmap.height * 0.9).toInt()
+                bitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
+                quality = 100 // reset quality when resizing
+            }
         }
 
         // Save compressed image into MediaStore
@@ -191,6 +203,7 @@ suspend fun CompressImage(
         return@withContext null
     }
 }
+
 
 
 
