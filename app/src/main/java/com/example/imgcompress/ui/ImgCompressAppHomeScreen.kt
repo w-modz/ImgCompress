@@ -100,6 +100,7 @@ fun ImgCompressAppHomeScreen(
             label = R.string.placeholder,
             initValue = size,
             modifier = Modifier.fillMaxWidth(),
+            isPercentSize = isPercentSize,
             onValueChanged = {updatedValue -> size = updatedValue}
         )
         Button(
@@ -199,6 +200,7 @@ fun EditNumberField(
     keyboardOptions: KeyboardOptions,
     modifier: Modifier = Modifier,
     initValue: Double,
+    isPercentSize: Boolean,
     onValueChanged: (Double) -> Unit
 ) {
     var value by remember { mutableStateOf(initValue.toString()) }
@@ -212,18 +214,35 @@ fun EditNumberField(
         },
         value = value,
         onValueChange = { newValue ->
-            // Validate input to be decimal
+            // Validate input to be decimal only
             if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d*\$"))) {
-                value = newValue
-                newValue.toDoubleOrNull()?.let { onValueChanged(it) }
+                // Parse number
+                val parsed = newValue.toDoubleOrNull()
+
+                // Apply limits
+                val isValid = when {
+                    parsed == null -> newValue.isEmpty()
+                    isPercentSize -> parsed in 1.0..100.0
+                    else -> true
+                }
+
+                if (isValid) {
+                    value = newValue
+                    parsed?.let { onValueChanged(it) }
+                }
             }
         },
         modifier = modifier,
         label = { Text(stringResource(label)) },
         singleLine = true,
-        keyboardOptions = keyboardOptions
+        keyboardOptions = keyboardOptions,
+        trailingIcon = {
+            Text(if (isPercentSize) "%" else "MB")
+        }
     )
 }
+
+
 
 
 
