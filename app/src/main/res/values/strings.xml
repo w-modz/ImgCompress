@@ -1,5 +1,6 @@
 <resources>
     <string name="app_name">ImgCompress</string>
     <string name="percent_size_flat_size">\Flat Size/% Size\</string>
-    <string name="placeholder">\placeholder\</string>
+    <string name="input_mb">\Input desired size in MB\</string>
+    <string name="input_percent">\Input desired size in percentages\</string>
 </resources>

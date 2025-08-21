@@ -7,8 +7,8 @@
  *
  *     https://www.apache.org/licenses/LICENSE-2.0
  *
- * Unless required by applicable law or agreed to in writing, software
- * distributed under the License is distributed on an "AS IS" BASIS,
+ * Unless required by applicable law or agreed to in writing,
+ * software distributed under the License is distributed on an "AS IS" BASIS,
  * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
  * See the License for the specific language governing permissions and
  * limitations under the License.
@@ -16,31 +16,41 @@
 package com.example.imgcompress.ui
 
 import android.content.ContentValues
+import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.net.Uri
+import android.provider.MediaStore
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.wrapContentWidth
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
+import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -52,25 +62,18 @@ import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import coil.compose.AsyncImage
 import com.example.imgcompress.R
-import android.content.Context
-import android.graphics.Bitmap
-import android.graphics.BitmapFactory
-import android.provider.MediaStore
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.TextButton
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.rememberCoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImgCompressAppHomeScreen(
     modifier: Modifier = Modifier,
 ) {
-    var isPercentSize by remember { mutableStateOf(false)}
+    var isPercentSize by remember { mutableStateOf(false) }
     var size by remember { mutableStateOf(0.0) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     val context = LocalContext.current
@@ -78,49 +81,75 @@ fun ImgCompressAppHomeScreen(
 
     var result by remember { mutableStateOf<CompressedImageResult?>(null) }
 
-    Column(modifier = Modifier
-        .padding(bottom = 32.dp, top = 32.dp)
-        .fillMaxSize(),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally)
-    {
-        UploadImageRow( onImageSelected = {uri -> selectedImageUri = uri})
-        PercentageSizeSwitchRow(
-            modifier = Modifier.fillMaxWidth()
-                .padding(start = 32.dp, end = 32.dp),
-            onPercentSizeChanged = {isPercentSize = it},
-            isPercentSize = isPercentSize
-        )
-        EditNumberField(
-            leadingIcon = R.drawable.ic_launcher_foreground,
-            keyboardOptions = KeyboardOptions.Default.copy(
-                keyboardType = KeyboardType.Decimal,
-                imeAction = ImeAction.Done
-            ),
-            label = R.string.placeholder,
-            initValue = size,
-            modifier = Modifier.fillMaxWidth(),
-            isPercentSize = isPercentSize,
-            onValueChanged = {updatedValue -> size = updatedValue}
-        )
-        Button(
-            onClick = {
-                scope.launch {
-                    selectedImageUri?.let {
-                        result = CompressImage(
-                            context = context,
-                            isPercentSize = isPercentSize,
-                            size = size,
-                            selectedImageUri = it
-                        )
-                    }
+    Scaffold(
+        topBar = {
+            TopAppBar(
+                title = { Text("Image Compressor") }
+            )
+        }
+    ) { innerPadding ->
+        Column(
+            modifier = Modifier
+                .padding(innerPadding)
+                .padding(16.dp)
+                .fillMaxSize(),
+            verticalArrangement = Arrangement.spacedBy(20.dp, Alignment.Top),
+            horizontalAlignment = Alignment.CenterHorizontally
+        ) {
+            UploadImageRow(onImageSelected = { uri -> selectedImageUri = uri })
+
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                elevation = CardDefaults.cardElevation(4.dp),
+                shape = RoundedCornerShape(16.dp)
+            ) {
+                Column(
+                    modifier = Modifier
+                        .padding(16.dp)
+                        .fillMaxWidth(),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    PercentageSizeSwitchRow(
+                        modifier = Modifier.fillMaxWidth(),
+                        onPercentSizeChanged = { isPercentSize = it },
+                        isPercentSize = isPercentSize
+                    )
+                    EditNumberField(
+                        leadingIcon = R.drawable.ic_launcher_foreground,
+                        keyboardOptions = KeyboardOptions.Default.copy(
+                            keyboardType = KeyboardType.Decimal,
+                            imeAction = ImeAction.Done
+                        ),
+                        label = if (isPercentSize) R.string.input_percent else R.string.input_mb,
+                        initValue = size,
+                        modifier = Modifier.fillMaxWidth(),
+                        isPercentSize = isPercentSize,
+                        onValueChanged = { updatedValue -> size = updatedValue }
+                    )
                 }
             }
-        ) { Text("Compress Photo") }
 
-        CompressionPopup(result = result, onDismiss = {result = null})
+            Button(
+                onClick = {
+                    scope.launch {
+                        selectedImageUri?.let {
+                            result = CompressImage(
+                                context = context,
+                                isPercentSize = isPercentSize,
+                                size = size,
+                                selectedImageUri = it
+                            )
+                        }
+                    }
+                },
+                modifier = Modifier.fillMaxWidth(0.8f)
+            ) {
+                Text("Compress Photo")
+            }
+
+            CompressionPopup(result = result, onDismiss = { result = null })
+        }
     }
-
 }
 
 data class CompressedImageResult(
@@ -128,7 +157,6 @@ data class CompressedImageResult(
     val originalSizeBytes: Long,
     val compressedSizeBytes: Long
 )
-
 
 suspend fun CompressImage(
     context: Context,
@@ -205,12 +233,6 @@ suspend fun CompressImage(
 }
 
 
-
-
-
-
-
-
 @Composable
 fun EditNumberField(
     @DrawableRes leadingIcon: Int,
@@ -232,12 +254,8 @@ fun EditNumberField(
         },
         value = value,
         onValueChange = { newValue ->
-            // Validate input to be decimal only
             if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d*\$"))) {
-                // Parse number
                 val parsed = newValue.toDoubleOrNull()
-
-                // Apply limits
                 val isValid = when {
                     parsed == null -> newValue.isEmpty()
                     isPercentSize -> parsed in 1.0..100.0
@@ -260,17 +278,13 @@ fun EditNumberField(
     )
 }
 
-
-
-
-
-
 @Composable
 fun PercentageSizeSwitchRow(
     modifier: Modifier = Modifier,
     onPercentSizeChanged: (Boolean) -> Unit,
-    isPercentSize: Boolean) {
-    Row(
+    isPercentSize: Boolean
+) {
+    androidx.compose.foundation.layout.Row(
         modifier = modifier
             .fillMaxWidth()
             .size(48.dp),
@@ -294,31 +308,34 @@ fun UploadImageRow(
 ) {
     var imageUri by remember { mutableStateOf<Uri?>(null) }
 
-    // Launcher for picking image
     val launcher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         imageUri = uri
-        uri?.let { onImageSelected(it) } // expose to parent
+        uri?.let { onImageSelected(it) }
     }
 
     Column(
-        modifier = modifier.padding(16.dp),
-        verticalArrangement = Arrangement.Center,
+        modifier = modifier.fillMaxWidth(),
+        verticalArrangement = Arrangement.spacedBy(12.dp),
         horizontalAlignment = Alignment.CenterHorizontally
     ) {
         Button(onClick = { launcher.launch("image/*") }) {
             Text("Choose Photo")
         }
 
-        Spacer(Modifier.height(16.dp))
-
         imageUri?.let {
-            AsyncImage(
-                model = it,
-                contentDescription = null,
+            Card(
+                shape = RoundedCornerShape(16.dp),
+                elevation = CardDefaults.cardElevation(8.dp),
                 modifier = Modifier.size(200.dp)
-            )
+            ) {
+                AsyncImage(
+                    model = it,
+                    contentDescription = null,
+                    modifier = Modifier.fillMaxSize()
+                )
+            }
         }
     }
 }
@@ -333,16 +350,13 @@ fun CompressionPopup(result: CompressedImageResult?, onDismiss: () -> Unit) {
                     Text("OK")
                 }
             },
-            title = { Text("Photo Saved") },
+            title = { Text("Photo Saved ✅") },
             text = {
                 Text(
-                    "Your photo has been saved.\n" +
-                            "Original size: ${"%.2f".format(result.originalSizeBytes / 1024.0)} KB\n" +
+                    "Original size: ${"%.2f".format(result.originalSizeBytes / 1024.0)} KB\n" +
                             "Compressed size: ${"%.2f".format(result.compressedSizeBytes / 1024.0)} KB"
                 )
             }
         )
     }
 }
-
-
