@@ -8,10 +8,10 @@
  *     https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing,
- * software distributed under the License is distributed on an "AS IS" BASIS,
- * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
- * See the License for the specific language governing permissions and
- * limitations under the License.
+ * software distributed under the License is distributed on an
+ * "AS IS" BASIS, WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND,
+ * either express or implied. See the License for the specific
+ * language governing permissions and limitations under the License.
  */
 package com.example.imgcompress.ui
 
@@ -25,8 +25,10 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
@@ -40,8 +42,8 @@ import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -67,13 +69,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
 
-
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ImgCompressAppHomeScreen(
     modifier: Modifier = Modifier,
 ) {
-    var isPercentSize by remember { mutableStateOf(false) }
+    var sizeOption by remember { mutableStateOf(SizeOption.Flat) }
     var size by remember { mutableStateOf(0.0) }
     var selectedImageUri by remember { mutableStateOf<Uri?>(null) }
     val context = LocalContext.current
@@ -109,10 +110,9 @@ fun ImgCompressAppHomeScreen(
                         .fillMaxWidth(),
                     verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
-                    PercentageSizeSwitchRow(
-                        modifier = Modifier.fillMaxWidth(),
-                        onPercentSizeChanged = { isPercentSize = it },
-                        isPercentSize = isPercentSize
+                    SizeOptionSelector(
+                        selectedOption = sizeOption,
+                        onOptionSelected = { sizeOption = it }
                     )
                     EditNumberField(
                         leadingIcon = R.drawable.ic_launcher_foreground,
@@ -120,10 +120,10 @@ fun ImgCompressAppHomeScreen(
                             keyboardType = KeyboardType.Decimal,
                             imeAction = ImeAction.Done
                         ),
-                        label = if (isPercentSize) R.string.input_percent else R.string.input_mb,
+                        label = if (sizeOption == SizeOption.Percentage) R.string.input_percent else R.string.input_mb,
                         initValue = size,
                         modifier = Modifier.fillMaxWidth(),
-                        isPercentSize = isPercentSize,
+                        sizeOption = sizeOption,
                         onValueChanged = { updatedValue -> size = updatedValue }
                     )
                 }
@@ -135,7 +135,7 @@ fun ImgCompressAppHomeScreen(
                         selectedImageUri?.let {
                             result = CompressImage(
                                 context = context,
-                                isPercentSize = isPercentSize,
+                                isPercentSize = (sizeOption == SizeOption.Percentage),
                                 size = size,
                                 selectedImageUri = it
                             )
@@ -161,21 +161,18 @@ data class CompressedImageResult(
 suspend fun CompressImage(
     context: Context,
     isPercentSize: Boolean,
-    size: Double, // if MB or percent
+    size: Double,
     selectedImageUri: Uri
 ): CompressedImageResult? = withContext(Dispatchers.IO) {
     try {
-        // Get original file size
         val fd = context.contentResolver.openFileDescriptor(selectedImageUri, "r")
         val originalSize = fd?.statSize ?: 0L
         fd?.close()
 
-        // Decode bitmap
         val inputStream = context.contentResolver.openInputStream(selectedImageUri)
         var bitmap = BitmapFactory.decodeStream(inputStream) ?: return@withContext null
         inputStream?.close()
 
-        // Target bytes
         val targetBytes: Long = if (isPercentSize) {
             (originalSize * (size / 100.0)).toLong()
         } else {
@@ -185,27 +182,24 @@ suspend fun CompressImage(
         val outputStream = ByteArrayOutputStream()
         var quality = 100
 
-        // Compression + downscale loop
         while (true) {
             outputStream.reset()
             bitmap.compress(Bitmap.CompressFormat.JPEG, quality, outputStream)
 
             if (outputStream.size() <= targetBytes || (quality <= 5 && bitmap.width <= 100)) {
-                break // either fits or cannot compress/rescale further
+                break
             }
 
             if (quality > 5) {
-                quality -= 5 // reduce quality first
+                quality -= 5
             } else {
-                // Reduce resolution by 90%
                 val newWidth = (bitmap.width * 0.9).toInt()
                 val newHeight = (bitmap.height * 0.9).toInt()
                 bitmap = Bitmap.createScaledBitmap(bitmap, newWidth, newHeight, true)
-                quality = 100 // reset quality when resizing
+                quality = 100
             }
         }
 
-        // Save compressed image into MediaStore
         val contentValues = ContentValues().apply {
             put(MediaStore.Images.Media.DISPLAY_NAME, "compressed_${System.currentTimeMillis()}.jpg")
             put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
@@ -232,7 +226,6 @@ suspend fun CompressImage(
     }
 }
 
-
 @Composable
 fun EditNumberField(
     @DrawableRes leadingIcon: Int,
@@ -240,7 +233,7 @@ fun EditNumberField(
     keyboardOptions: KeyboardOptions,
     modifier: Modifier = Modifier,
     initValue: Double,
-    isPercentSize: Boolean,
+    sizeOption: SizeOption,
     onValueChanged: (Double) -> Unit
 ) {
     var value by remember { mutableStateOf(initValue.toString()) }
@@ -258,10 +251,9 @@ fun EditNumberField(
                 val parsed = newValue.toDoubleOrNull()
                 val isValid = when {
                     parsed == null -> newValue.isEmpty()
-                    isPercentSize -> parsed in 1.0..100.0
+                    sizeOption == SizeOption.Percentage -> parsed in 1.0..100.0
                     else -> true
                 }
-
                 if (isValid) {
                     value = newValue
                     parsed?.let { onValueChanged(it) }
@@ -273,32 +265,9 @@ fun EditNumberField(
         singleLine = true,
         keyboardOptions = keyboardOptions,
         trailingIcon = {
-            Text(if (isPercentSize) "%" else "MB")
+            Text(if (sizeOption == SizeOption.Percentage) "%" else "MB")
         }
     )
-}
-
-@Composable
-fun PercentageSizeSwitchRow(
-    modifier: Modifier = Modifier,
-    onPercentSizeChanged: (Boolean) -> Unit,
-    isPercentSize: Boolean
-) {
-    androidx.compose.foundation.layout.Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .size(48.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        Text(text = stringResource(R.string.percent_size_flat_size))
-        Switch(
-            modifier = modifier
-                .fillMaxWidth()
-                .wrapContentWidth(Alignment.End),
-            checked = isPercentSize,
-            onCheckedChange = onPercentSizeChanged,
-        )
-    }
 }
 
 @Composable
@@ -360,3 +329,40 @@ fun CompressionPopup(result: CompressedImageResult?, onDismiss: () -> Unit) {
         )
     }
 }
+
+@Composable
+fun SizeOptionSelector(
+    selectedOption: SizeOption,
+    onOptionSelected: (SizeOption) -> Unit
+) {
+    Column {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOptionSelected(SizeOption.Flat) }
+                .padding(8.dp)
+        ) {
+            RadioButton(
+                selected = selectedOption == SizeOption.Flat,
+                onClick = { onOptionSelected(SizeOption.Flat) }
+            )
+            Text("Flat Size (MB)")
+        }
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            modifier = Modifier
+                .fillMaxWidth()
+                .clickable { onOptionSelected(SizeOption.Percentage) }
+                .padding(8.dp)
+        ) {
+            RadioButton(
+                selected = selectedOption == SizeOption.Percentage,
+                onClick = { onOptionSelected(SizeOption.Percentage) }
+            )
+            Text("Percentage (%)")
+        }
+    }
+}
+
+enum class SizeOption { Flat, Percentage }
