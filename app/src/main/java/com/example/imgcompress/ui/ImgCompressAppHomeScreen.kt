@@ -68,6 +68,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.ByteArrayOutputStream
+import androidx.compose.ui.text.AnnotatedString
+import androidx.compose.ui.text.input.OffsetMapping
+import androidx.compose.ui.text.input.TransformedText
+import androidx.compose.ui.text.input.VisualTransformation
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -115,7 +119,6 @@ fun ImgCompressAppHomeScreen(
                         onOptionSelected = { sizeOption = it }
                     )
                     EditNumberField(
-                        leadingIcon = R.drawable.ic_launcher_foreground,
                         keyboardOptions = KeyboardOptions.Default.copy(
                             keyboardType = KeyboardType.Decimal,
                             imeAction = ImeAction.Done
@@ -226,9 +229,21 @@ suspend fun CompressImage(
     }
 }
 
+fun SuffixTransformation(suffix: String): VisualTransformation {
+    return VisualTransformation { text ->
+        val out = AnnotatedString(text.text + " $suffix")
+        val offsetMapping = object : OffsetMapping {
+            override fun originalToTransformed(offset: Int): Int = offset
+            override fun transformedToOriginal(offset: Int): Int =
+                offset.coerceAtMost(text.text.length)
+        }
+        TransformedText(out, offsetMapping)
+    }
+}
+
+
 @Composable
 fun EditNumberField(
-    @DrawableRes leadingIcon: Int,
     @StringRes label: Int,
     keyboardOptions: KeyboardOptions,
     modifier: Modifier = Modifier,
@@ -239,12 +254,6 @@ fun EditNumberField(
     var value by remember { mutableStateOf(initValue.toString()) }
 
     TextField(
-        leadingIcon = {
-            Icon(
-                painter = painterResource(id = leadingIcon),
-                contentDescription = null
-            )
-        },
         value = value,
         onValueChange = { newValue ->
             if (newValue.isEmpty() || newValue.matches(Regex("^\\d*\\.?\\d*\$"))) {
@@ -264,11 +273,12 @@ fun EditNumberField(
         label = { Text(stringResource(label)) },
         singleLine = true,
         keyboardOptions = keyboardOptions,
-        trailingIcon = {
-            Text(if (sizeOption == SizeOption.Percentage) "%" else "MB")
-        }
+        visualTransformation = SuffixTransformation(
+            if (sizeOption == SizeOption.Percentage) "%" else "MB"
+        )
     )
 }
+
 
 @Composable
 fun UploadImageRow(
