@@ -10,7 +10,7 @@
       This tool is helpful for reducing photo sizes before sharing, uploading, or storing them.
     </td>
     <td>
-      <img src="" alt="App Screenshot" width="800"/>
+      <img src="https://github.com/w-modz/ImgCompress/blob/main/Screenshot_ImgCompress.jpg" alt="App Screenshot" width="800"/>
     </td>
   </tr>
 </table>
